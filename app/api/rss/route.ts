@@ -30,7 +30,8 @@ export async function GET() {
     const validResults = results.filter(result => result !== null);
 
     return NextResponse.json({ feeds: validResults });
-  } catch (error) {
+  } catch (error: unknown) {
+    console.error('获取RSS内容失败:', error);
     return NextResponse.json(
       { error: '获取RSS内容失败' },
       { status: 500 }

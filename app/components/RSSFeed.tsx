@@ -62,7 +62,7 @@ const RSSFeed = () => {
             error: matchingFeed ? null : '该RSS源无法访问或格式不正确'
           };
         }));
-      } catch (err) {
+      } catch (error) {
         setFeedsStatus(prev => prev.map(feed => ({
           ...feed,
           loading: false,
@@ -116,7 +116,7 @@ const RSSFeed = () => {
               }`}
             >
               <div className="space-y-4">
-                {feedsStatus.map((feed, index) => (
+                {feedsStatus.map((feed) => (
                   <div 
                     key={feed.url} 
                     className="rounded-xl overflow-hidden backdrop-blur-xl bg-white/20 dark:bg-black/20 shadow-lg border border-white/30 dark:border-white/10"

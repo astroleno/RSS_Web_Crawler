@@ -102,7 +102,7 @@ const LLMSummary = ({ content, onSummaryComplete }: LLMSummaryProps) => {
                 li: ({ ...props }) => (
                   <li {...props} className="!text-white" />
                 ),
-                code: ({ inline, className, children, ...props }) => {
+                code: ({ className, children, ...props }) => {
                   const match = /language-(\w+)/.exec(className || '');
                   return match ? (
                     <code
