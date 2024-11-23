@@ -1,12 +1,20 @@
 import { NextResponse } from 'next/server';
 import Parser from 'rss-parser';
-import feeds from '@/rss-feeds.json';
 
 const parser = new Parser();
 
-export async function GET() {
+export async function POST(request: Request) {
   try {
-    const feedPromises = feeds.feeds.map(async (feed) => {
+    const { feeds } = await request.json();
+
+    if (!feeds || !Array.isArray(feeds)) {
+      return NextResponse.json(
+        { error: '无效的 RSS 源列表' },
+        { status: 400 }
+      );
+    }
+
+    const feedPromises = feeds.map(async (feed) => {
       try {
         const content = await parser.parseURL(feed.url);
         return {

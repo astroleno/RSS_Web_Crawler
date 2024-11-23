@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import feeds from '@/rss-feeds.json';
 import LLMSummary from './LLMSummary';
+import Settings from './Settings';
 
 interface FeedItem {
   title: string;
@@ -19,17 +20,20 @@ interface Feed {
 }
 
 const RSSFeed = () => {
+  const [settings, setSettings] = useState<{
+    apiKey: string;
+    feeds: { url: string }[];
+  }>({
+    apiKey: '',
+    feeds: []
+  });
+
   const [feedsStatus, setFeedsStatus] = useState<{
     data: Feed | null;
     error: string | null;
     loading: boolean;
     url: string;
-  }[]>(feeds.feeds.map(feed => ({
-    data: null,
-    error: null,
-    loading: true,
-    url: feed.url
-  })));
+  }[]>([]);
 
   const [selectedItem, setSelectedItem] = useState<{
     item: FeedItem;
@@ -44,9 +48,24 @@ const RSSFeed = () => {
   };
 
   useEffect(() => {
+    setFeedsStatus(settings.feeds.map(feed => ({
+      data: null,
+      error: null,
+      loading: true,
+      url: feed.url
+    })));
+  }, [settings]);
+
+  useEffect(() => {
     const fetchFeeds = async () => {
       try {
-        const response = await fetch('/api/rss');
+        const response = await fetch('/api/rss', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ feeds: settings.feeds })
+        });
         const data = await response.json();
         
         if (data.error) {
@@ -72,8 +91,10 @@ const RSSFeed = () => {
       }
     };
 
-    fetchFeeds();
-  }, []);
+    if (settings.feeds.length > 0) {
+      fetchFeeds();
+    }
+  }, [settings]);
 
   useEffect(() => {
     let scrollTimeout: NodeJS.Timeout;
@@ -105,6 +126,7 @@ const RSSFeed = () => {
 
   return (
     <div className="min-h-screen relative">
+      <Settings onSettingsChange={setSettings} />
       <div className="fixed inset-0 bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 animate-gradient-breathe" />
       <div className="absolute inset-0 scroll-container">
         <div className="w-full px-4 py-8">
@@ -220,7 +242,10 @@ const RSSFeed = () => {
                         </a>
                       </div>
                       
-                      <LLMSummary content={selectedItem?.item.content || ''} />
+                      <LLMSummary 
+                        content={selectedItem?.item.content || ''} 
+                        apiKey={settings.apiKey}
+                      />
                       
                       <div 
                         className="prose prose-invert max-w-none mt-8 [&>*]:text-white

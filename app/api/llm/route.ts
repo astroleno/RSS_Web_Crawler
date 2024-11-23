@@ -1,14 +1,21 @@
 import { NextResponse } from 'next/server';
 import { OpenAI } from 'openai';
 
-const client = new OpenAI({
-  baseURL: 'https://api.siliconflow.cn/v1',
-  apiKey: process.env.SILICON_API_KEY || process.env.OPENAI_API_KEY,
-});
-
 export async function POST(request: Request) {
   try {
-    const { content } = await request.json();
+    const { content, apiKey } = await request.json();
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: '请在设置中配置 API Key' },
+        { status: 400 }
+      );
+    }
+
+    const client = new OpenAI({
+      baseURL: 'https://api.siliconflow.cn/v1',
+      apiKey: apiKey,
+    });
 
     const response = await client.chat.completions.create({
       model: "Qwen/Qwen2.5-7B-Instruct",

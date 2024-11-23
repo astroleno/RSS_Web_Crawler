@@ -6,10 +6,10 @@ import remarkGfm from 'remark-gfm';
 
 interface LLMSummaryProps {
   content: string;
-  onSummaryComplete?: (summary: string) => void;
+  apiKey: string;
 }
 
-const LLMSummary = ({ content, onSummaryComplete }: LLMSummaryProps) => {
+const LLMSummary = ({ content, apiKey }: LLMSummaryProps) => {
   const [summary, setSummary] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +24,7 @@ const LLMSummary = ({ content, onSummaryComplete }: LLMSummaryProps) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({ content, apiKey }),
       });
 
       const data = await response.json();
@@ -34,7 +34,6 @@ const LLMSummary = ({ content, onSummaryComplete }: LLMSummaryProps) => {
       }
 
       setSummary(data.summary);
-      onSummaryComplete?.(data.summary);
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成摘要失败');
     } finally {
