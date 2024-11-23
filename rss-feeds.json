@@ -1,0 +1,10 @@
+{
+  "feeds": [
+    {
+      "url": "https://www.ruanyifeng.com/blog/atom.xml"
+    },
+    {
+      "url": "https://sspai.com/feed"
+    }
+  ]
+} 
