@@ -63,10 +63,11 @@ const RSSFeed = () => {
           };
         }));
       } catch (err) {
+        console.error('RSS获取失败:', err);
         setFeedsStatus(prev => prev.map(feed => ({
           ...feed,
           loading: false,
-          error: '获取RSS内容失败'
+          error: err instanceof Error ? err.message : '获取RSS内容失败'
         })));
       }
     };
