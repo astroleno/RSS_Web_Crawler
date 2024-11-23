@@ -62,7 +62,7 @@ const RSSFeed = () => {
             error: matchingFeed ? null : '该RSS源无法访问或格式不正确'
           };
         }));
-      } catch (error) {
+      } catch (err) {
         setFeedsStatus(prev => prev.map(feed => ({
           ...feed,
           loading: false,
