@@ -23,9 +23,19 @@ const RSSFeed = () => {
   const [settings, setSettings] = useState<{
     apiKey: string;
     feeds: { url: string }[];
+    llmConfig: {
+      type: string;
+      model: string;
+      baseUrl: string;
+    };
   }>({
     apiKey: '',
-    feeds: []
+    feeds: [],
+    llmConfig: {
+      type: 'openai',
+      model: 'gpt-3.5-turbo',
+      baseUrl: 'https://api.openai.com/v1',
+    }
   });
 
   const [feedsStatus, setFeedsStatus] = useState<{
@@ -245,6 +255,7 @@ const RSSFeed = () => {
                       <LLMSummary 
                         content={selectedItem?.item.content || ''} 
                         apiKey={settings.apiKey}
+                        llmConfig={settings.llmConfig}
                       />
                       
                       <div 

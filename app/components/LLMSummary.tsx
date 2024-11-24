@@ -7,9 +7,14 @@ import remarkGfm from 'remark-gfm';
 interface LLMSummaryProps {
   content: string;
   apiKey: string;
+  llmConfig: {
+    type: string;
+    model: string;
+    baseUrl: string;
+  };
 }
 
-const LLMSummary = ({ content, apiKey }: LLMSummaryProps) => {
+const LLMSummary = ({ content, apiKey, llmConfig }: LLMSummaryProps) => {
   const [summary, setSummary] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +29,11 @@ const LLMSummary = ({ content, apiKey }: LLMSummaryProps) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ content, apiKey }),
+        body: JSON.stringify({ 
+          content, 
+          apiKey,
+          llmConfig,
+        }),
       });
 
       const data = await response.json();
