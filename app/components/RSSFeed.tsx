@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import feeds from '@/rss-feeds.json';
 import LLMSummary from './LLMSummary';
 import Settings from './Settings';
+import { Feed } from '../types/feed';
 
 interface FeedItem {
   title: string;

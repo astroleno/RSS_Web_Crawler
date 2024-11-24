@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { OpenAI } from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+import path from 'path'
+import { promises as fs } from 'fs'
 
 export async function POST(request: Request) {
   try {
