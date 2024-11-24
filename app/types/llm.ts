@@ -20,7 +20,7 @@ export const DEFAULT_PROXY_URLS = [
   }
 ];
 
-export const DEFAULT_API_KEY = 'sk-sOIEAG7NPcJmfMH2D313E65846154b819a0358966b6841Ff';
+export const DEFAULT_API_KEY = '';
 
 export const DEFAULT_MODELS = [
   { label: 'GPT-4-mini', value: 'gpt-4o-mini' },
