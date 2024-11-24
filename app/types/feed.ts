@@ -1,15 +1,15 @@
-export interface Feed {
-  title: string;
-  description: string;
-  items: FeedItem[];
-  sourceUrl: string;
-}
-
 export interface FeedItem {
   title: string;
   link: string;
   pubDate: string;
   content: string;
+}
+
+export interface Feed {
+  title: string;
+  description: string;
+  items: FeedItem[];
+  sourceUrl: string;
 }
 
 export const DEFAULT_RSS_FEEDS = [

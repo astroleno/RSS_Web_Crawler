@@ -7,15 +7,15 @@ export interface LLMConfig {
 
 export const DEFAULT_PROXY_URLS = [
   { 
-    url: 'https://api.xi-ai.cn/v1/chat/completions',
+    url: 'https://api.xi-ai.cn/v1',
     name: 'XI-AI代理'
   },
   { 
-    url: 'https://api.guil.vip/v1/chat/completions',
+    url: 'https://api.guil.vip/v1',
     name: '硅流代理'
   },
   { 
-    url: 'https://api.wlai.vip/v1/chat/completions',
+    url: 'https://api.wlai.vip/v1',
     name: 'WLAI代理'
   }
 ];
@@ -52,7 +52,7 @@ export const DEFAULT_SYSTEM_PROMPT = `# Role: 信息总结专家
 - 提取网页中的有用或有趣的内容，字数不超过150字。
 
 ## OutputFormat:
-- 提供简洁且具有信��密度的总结，避免赘述。
+- 提供简洁且具有信息密度的总结，避免赘述。
 
 ## Rules:
 1. 提取最有价值的信息
@@ -63,6 +63,4 @@ export const DEFAULT_SYSTEM_PROMPT = `# Role: 信息总结专家
 1. 用户提供网页链接或内容。
 2. 提取并总结出关键点。
 3. 输出精简而富有价值的总结。
-
-## Init:
-请提供您想要总结的网页链接或内容，我将根据这些信息为您生成简短的总结。`; 
+4. 使用markdown输出，并且加粗重点部分，在摘要最开始的部分输出2-4个文章标签关键词。`; 

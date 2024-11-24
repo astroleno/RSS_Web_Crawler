@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import feeds from '@/rss-feeds.json';
 import LLMSummary from './LLMSummary';
 import Settings from './Settings';
 import { Feed } from '../types/feed';
@@ -102,7 +101,7 @@ const RSSFeed = () => {
         setFeedsStatus(settings.feeds.map(feed => ({
           data: null,
           loading: false,
-          error: err instanceof Error ? err.message : '获取RSS内容失败',
+          error: err instanceof Error ? err.message : '���取RSS内容失败',
           url: feed.url
         })));
       }

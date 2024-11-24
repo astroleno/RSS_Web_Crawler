@@ -28,13 +28,13 @@ const Settings = ({ onSettingsChange }: SettingsProps) => {
   });
 
   const [customModel, setCustomModel] = useState('');
-  const [customBaseUrl, setCustomBaseUrl] = useState('');
   const [selectedProxyUrl, setSelectedProxyUrl] = useState(DEFAULT_PROXY_URLS[0].url);
   const [editableProxyUrl, setEditableProxyUrl] = useState(DEFAULT_PROXY_URLS[0].url);
 
   const [needsUpdate, setNeedsUpdate] = useState(false);
 
   const [customModels, setCustomModels] = useState<Array<{label: string, value: string}>>([]);
+  const [showCustomFields, setShowCustomFields] = useState(false);
 
   useEffect(() => {
     if (feeds.length === 0) {
@@ -42,7 +42,7 @@ const Settings = ({ onSettingsChange }: SettingsProps) => {
       setFeeds(defaultFeeds);
       onSettingsChange({ apiKey, feeds: defaultFeeds, llmConfig });
     }
-  }, []);
+  }, [feeds.length, apiKey, llmConfig, onSettingsChange]);
 
   const handleAddFeed = () => {
     if (feedUrl) {
@@ -77,8 +77,6 @@ const Settings = ({ onSettingsChange }: SettingsProps) => {
       setNeedsUpdate(true);
     }
   };
-
-  const [showCustomFields, setShowCustomFields] = useState(false);
 
   const handleCustomModelSave = () => {
     if (customModel) {
