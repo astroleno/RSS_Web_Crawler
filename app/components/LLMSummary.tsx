@@ -11,6 +11,7 @@ interface LLMSummaryProps {
     type: string;
     model: string;
     baseUrl: string;
+    systemPrompt?: string;
   };
 }
 

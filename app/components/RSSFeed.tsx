@@ -5,6 +5,7 @@ import feeds from '@/rss-feeds.json';
 import LLMSummary from './LLMSummary';
 import Settings from './Settings';
 import { Feed } from '../types/feed';
+import { DEFAULT_SYSTEM_PROMPT } from '../types/llm';
 
 interface FeedItem {
   title: string;
@@ -28,6 +29,7 @@ const RSSFeed = () => {
       type: string;
       model: string;
       baseUrl: string;
+      systemPrompt?: string;
     };
   }>({
     apiKey: '',
@@ -36,6 +38,7 @@ const RSSFeed = () => {
       type: 'openai',
       model: 'gpt-3.5-turbo',
       baseUrl: 'https://api.openai.com/v1',
+      systemPrompt: DEFAULT_SYSTEM_PROMPT
     }
   });
 
@@ -51,6 +54,8 @@ const RSSFeed = () => {
     feedTitle: string;
   } | null>(null);
 
+  const [collapsedFeeds, setCollapsedFeeds] = useState<{[key: string]: boolean}>({});
+
   const extractTextContent = (html: string) => {
     const div = document.createElement('div');
     div.innerHTML = html;
@@ -58,14 +63,12 @@ const RSSFeed = () => {
     return text.substring(0, 100) + '...';
   };
 
-  useEffect(() => {
-    setFeedsStatus(settings.feeds.map(feed => ({
-      data: null,
-      error: null,
-      loading: true,
-      url: feed.url
-    })));
-  }, [settings]);
+  const toggleFeedCollapse = (url: string) => {
+    setCollapsedFeeds(prev => ({
+      ...prev,
+      [url]: !prev[url]
+    }));
+  };
 
   useEffect(() => {
     const fetchFeeds = async () => {
@@ -83,26 +86,35 @@ const RSSFeed = () => {
           throw new Error(data.error);
         }
 
-        setFeedsStatus(prev => prev.map(feed => {
-          const matchingFeed = data.feeds.find((f: Feed) => f.sourceUrl === feed.url);
+        const orderedFeedsStatus = settings.feeds.map(settingFeed => {
+          const matchingFeed = data.feeds.find((f: Feed) => f.sourceUrl === settingFeed.url);
           return {
-            ...feed,
-            data: matchingFeed,
+            data: matchingFeed || null,
+            error: matchingFeed ? null : '该RSS源无法访问或格式不正确',
             loading: false,
-            error: matchingFeed ? null : '该RSS源无法访问或格式不正确'
+            url: settingFeed.url
           };
-        }));
+        });
+
+        setFeedsStatus(orderedFeedsStatus);
       } catch (err) {
         console.error('RSS获取失败:', err);
-        setFeedsStatus(prev => prev.map(feed => ({
-          ...feed,
+        setFeedsStatus(settings.feeds.map(feed => ({
+          data: null,
           loading: false,
-          error: err instanceof Error ? err.message : '获取RSS内容失败'
+          error: err instanceof Error ? err.message : '获取RSS内容失败',
+          url: feed.url
         })));
       }
     };
 
     if (settings.feeds.length > 0) {
+      setFeedsStatus(settings.feeds.map(feed => ({
+        data: null,
+        error: null,
+        loading: true,
+        url: feed.url
+      })));
       fetchFeeds();
     }
   }, [settings]);
@@ -155,22 +167,38 @@ const RSSFeed = () => {
                     key={feed.url} 
                     className="rounded-xl overflow-hidden backdrop-blur-xl bg-white/20 dark:bg-black/20 shadow-lg border border-white/30 dark:border-white/10"
                   >
-                    <div className="p-4 backdrop-blur-sm bg-white/10 dark:bg-black/10">
-                      <h2 className="text-lg font-bold mb-2 text-white dark:text-white/90">
-                        {feed.data?.title || feed.url}
+                    <div 
+                      className="p-4 backdrop-blur-sm bg-white/10 dark:bg-black/10 cursor-pointer flex items-center justify-between"
+                      onClick={() => toggleFeedCollapse(feed.url)}
+                    >
+                      <h2 className="text-lg font-bold text-white dark:text-white/90 flex items-center gap-2">
+                        <span>{feed.data?.title || feed.url}</span>
+                        {feed.data?.items && (
+                          <span className="text-sm font-normal text-white/70">
+                            ({feed.data.items.length})
+                          </span>
+                        )}
                       </h2>
-                      {feed.loading && (
-                        <div className="text-white/70">正在加载...</div>
-                      )}
-                      {feed.error && (
-                        <div className="text-red-200 text-sm bg-red-500/20 p-2 rounded">
-                          错误: {feed.error}
-                        </div>
-                      )}
+                      <button 
+                        className="text-white/70 hover:text-white transition-colors"
+                        aria-label={collapsedFeeds[feed.url] ? "展开" : "折叠"}
+                      >
+                        {collapsedFeeds[feed.url] ? '▼' : '▲'}
+                      </button>
                     </div>
 
-                    {feed.data && (
-                      <div className={`divide-y divide-white/10 dark:divide-white/5 ${
+                    {feed.loading && (
+                      <div className="p-4 text-white/70">正在加载...</div>
+                    )}
+                    
+                    {feed.error && (
+                      <div className="p-4 text-red-200 text-sm bg-red-500/20 rounded">
+                        错误: {feed.error}
+                      </div>
+                    )}
+
+                    {!collapsedFeeds[feed.url] && feed.data && (
+                      <div className={`${
                         selectedItem 
                           ? '' 
                           : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 p-4'

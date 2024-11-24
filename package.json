@@ -15,8 +15,7 @@
     "react-dom": "^18.2.0",
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.0",
-    "rss-parser": "^3.13.0",
-    "@anthropic-ai/sdk": "^0.18.0"
+    "rss-parser": "^3.13.0"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.15",
