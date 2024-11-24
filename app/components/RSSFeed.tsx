@@ -3,22 +3,8 @@
 import { useEffect, useState } from 'react';
 import LLMSummary from './LLMSummary';
 import Settings from './Settings';
-import { Feed } from '../types/feed';
+import { Feed, FeedItem } from '../types/feed';
 import { DEFAULT_SYSTEM_PROMPT } from '../types/llm';
-
-interface FeedItem {
-  title: string;
-  link: string;
-  pubDate: string;
-  content: string;
-}
-
-interface Feed {
-  title: string;
-  description: string;
-  items: FeedItem[];
-  sourceUrl: string;
-}
 
 const RSSFeed = () => {
   const [settings, setSettings] = useState<{
@@ -101,7 +87,7 @@ const RSSFeed = () => {
         setFeedsStatus(settings.feeds.map(feed => ({
           data: null,
           loading: false,
-          error: err instanceof Error ? err.message : '���取RSS内容失败',
+          error: err instanceof Error ? err.message : '取RSS内容失败',
           url: feed.url
         })));
       }
@@ -254,7 +240,7 @@ const RSSFeed = () => {
                     onClick={() => setSelectedItem(null)}
                     className="text-sm text-white hover:text-white/80 transition-colors duration-300"
                   >
-                    收起文章 ×
+                    收起文�� ×
                   </button>
                 </div>
                 <div className="relative">
