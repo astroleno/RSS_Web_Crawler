@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import LLMSummary from './LLMSummary';
 import Settings from './Settings';
-import { Feed, FeedItem } from '../types/feed';
+import { Feed, FeedItem, DEFAULT_RSS_FEEDS } from '../types/feed';
 import { DEFAULT_SYSTEM_PROMPT } from '../types/llm';
 
 // 添加常量用于 localStorage keys
@@ -176,6 +176,20 @@ const RSSFeed = () => {
     };
   }, []);
 
+  // 添加一个辅助函数来将文本拆分成字符数组
+  const splitTextToChars = (text: string) => {
+    return text.split('').map((char, index) => (
+      <span key={index} style={{ animationDelay: `${index * 0.1}s` }}>
+        {char}
+      </span>
+    ));
+  };
+
+  // 修改 find 函数的类型声明
+  const findFeedName = (url: string) => {
+    return DEFAULT_RSS_FEEDS.find((f: { url: string; name: string }) => f.url === url)?.name;
+  };
+
   return (
     <div className="min-h-screen relative">
       <div className="fixed inset-0 bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 animate-gradient-breathe" />
@@ -206,11 +220,28 @@ const RSSFeed = () => {
                         onClick={() => toggleFeedCollapse(feed.url)}
                       >
                         <h2 className="text-lg font-bold text-white dark:text-white/90 flex items-center gap-2">
-                          <span>{feed.data?.title || feed.url}</span>
-                          {feed.data?.items && (
-                            <span className="text-sm font-normal text-white/70">
-                              ({feed.data.items.length})
-                            </span>
+                          {feed.data ? (
+                            // 已加载完成，显示频道名称
+                            <>
+                              <span>{feed.data.title}</span>
+                              <span className="text-sm font-normal text-white/70">
+                                ({feed.data.items.length})
+                              </span>
+                            </>
+                          ) : (
+                            // 正在加载，显示动画效果
+                            <>
+                              {findFeedName(feed.url) ? (
+                                <span className="animate-float">
+                                  {splitTextToChars(findFeedName(feed.url) || '')}
+                                </span>
+                              ) : (
+                                <span>{feed.url}</span>
+                              )}
+                              <span className="text-sm font-normal text-white/70">
+                                (加载中...)
+                              </span>
+                            </>
                           )}
                         </h2>
                         <button 
@@ -221,53 +252,57 @@ const RSSFeed = () => {
                         </button>
                       </div>
 
-                      {feed.loading && (
-                        <div className="p-4 text-white/70">正在加载...</div>
-                      )}
-                      
-                      {feed.error && (
-                        <div className="p-4 text-red-200 text-sm bg-red-500/20 rounded">
-                          错误: {feed.error}
-                        </div>
-                      )}
+                      {!collapsedFeeds[feed.url] && (
+                        <>
+                          {feed.loading && !feed.data && (
+                            <div className="p-4 text-white/70">正在加载...</div>
+                          )}
+                          
+                          {feed.error && (
+                            <div className="p-4 text-red-200 text-sm bg-red-500/20 rounded">
+                              错误: {feed.error}
+                            </div>
+                          )}
 
-                      {!collapsedFeeds[feed.url] && feed.data && (
-                        <div className={`${
-                          selectedItem 
-                            ? '' 
-                            : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 p-4'
-                        }`}>
-                          {feed.data.items.map((item, itemIndex) => (
-                            <button 
-                              key={itemIndex}
-                              className={`w-full text-left group ${
-                                selectedItem 
-                                  ? 'px-4 py-2 hover:bg-white/10 dark:hover:bg-white/5' 
-                                  : 'p-4 rounded-lg hover:bg-white/10 dark:hover:bg-white/5'
-                              } transition-all duration-300 ease-in-out ${
-                                selectedItem?.item === item ? 'bg-white/20 dark:bg-white/10' : ''
-                              }`}
-                              onClick={() => setSelectedItem({ 
-                                item, 
-                                feedTitle: feed.data?.title || feed.url
-                              })}
-                            >
-                              <h3 className={`font-medium text-white dark:text-white/90 ${
-                                selectedItem ? 'text-sm line-clamp-2' : 'text-lg mb-2'
-                              } group-hover:translate-x-1 transition-transform duration-300`}>
-                                {item.title}
-                              </h3>
-                              {!selectedItem && (
-                                <p className="text-sm text-white/70 dark:text-white/60 mb-2 line-clamp-3">
-                                  {extractTextContent(item.content)}
-                                </p>
-                              )}
-                              <time className="text-xs text-white/50 block">
-                                {new Date(item.pubDate).toLocaleDateString('zh-CN')}
-                              </time>
-                            </button>
-                          ))}
-                        </div>
+                          {feed.data && (
+                            <div className={`${
+                              selectedItem 
+                                ? '' 
+                                : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 p-4'
+                            }`}>
+                              {feed.data.items.map((item, itemIndex) => (
+                                <button 
+                                  key={itemIndex}
+                                  className={`w-full text-left group ${
+                                    selectedItem 
+                                      ? 'px-4 py-2 hover:bg-white/10 dark:hover:bg-white/5' 
+                                      : 'p-4 rounded-lg hover:bg-white/10 dark:hover:bg-white/5'
+                                  } transition-all duration-300 ease-in-out ${
+                                    selectedItem?.item === item ? 'bg-white/20 dark:bg-white/10' : ''
+                                  }`}
+                                  onClick={() => setSelectedItem({ 
+                                    item, 
+                                    feedTitle: feed.data?.title || feed.url
+                                  })}
+                                >
+                                  <h3 className={`font-medium text-white dark:text-white/90 ${
+                                    selectedItem ? 'text-sm line-clamp-2' : 'text-lg mb-2'
+                                  } group-hover:translate-x-1 transition-transform duration-300`}>
+                                    {item.title}
+                                  </h3>
+                                  {!selectedItem && (
+                                    <p className="text-sm text-white/70 dark:text-white/60 mb-2 line-clamp-3">
+                                      {extractTextContent(item.content)}
+                                    </p>
+                                  )}
+                                  <time className="text-xs text-white/50 block">
+                                    {new Date(item.pubDate).toLocaleDateString('zh-CN')}
+                                  </time>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   ))}
