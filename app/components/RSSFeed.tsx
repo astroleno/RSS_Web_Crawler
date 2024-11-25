@@ -15,19 +15,28 @@ const STORAGE_KEYS = {
 // 创建默认设置
 const DEFAULT_SETTINGS = {
   apiKey: '',
-  feeds: [],
+  feeds: [] as { url: string }[],
   llmConfig: {
     type: 'openai',
     model: 'gpt-3.5-turbo',
     baseUrl: 'https://api.openai.com/v1',
     systemPrompt: DEFAULT_SYSTEM_PROMPT
   }
-};
+} as const;
 
 const RSSFeed = () => {
   // 使用 useState 的延迟初始化功能
   const [initialized, setInitialized] = useState(false);
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<{
+    apiKey: string;
+    feeds: { url: string }[];
+    llmConfig: {
+      type: string;
+      model: string;
+      baseUrl: string;
+      systemPrompt: string;
+    };
+  }>(DEFAULT_SETTINGS);
   const [feedsStatus, setFeedsStatus] = useState<Map<string, {
     data: Feed | null;
     error: string | null;
@@ -56,15 +65,23 @@ const RSSFeed = () => {
         }));
       }
 
-      // 从 localStorage 加载折叠状态
+      // 从 localStorage 加载折叠状态，如果没有则设置所有频道为折叠状态
       const savedCollapsed = localStorage.getItem(STORAGE_KEYS.COLLAPSED_FEEDS);
       if (savedCollapsed) {
         setCollapsedFeeds(JSON.parse(savedCollapsed));
+      } else {
+        // 设置所有频道默认为折叠状态
+        const defaultCollapsed = DEFAULT_RSS_FEEDS.reduce((acc, feed) => {
+          acc[feed.url] = true; // true 表示折叠
+          return acc;
+        }, {} as {[key: string]: boolean});
+        setCollapsedFeeds(defaultCollapsed);
+        localStorage.setItem(STORAGE_KEYS.COLLAPSED_FEEDS, JSON.stringify(defaultCollapsed));
       }
 
       setInitialized(true);
     }
-  }, [initialized]);
+  }, [initialized, settings.feeds.length]);
 
   const extractTextContent = (html: string) => {
     const div = document.createElement('div');
@@ -139,32 +156,38 @@ const RSSFeed = () => {
 
   useEffect(() => {
     // 对每个 feed 设置初始状态并开始加载
-    settings.feeds.forEach(feed => {
-      // 检查是否已经在加载或已加载
-      if (!feedsStatus.has(feed.url)) {
-        setFeedsStatus(prev => {
-          const newStatus = new Map(prev);
+    const unloadedFeeds = settings.feeds.filter(feed => !feedsStatus.has(feed.url));
+    
+    if (unloadedFeeds.length > 0) {
+      // 一次性更新所有未加载的 feeds 的状态
+      setFeedsStatus(prev => {
+        const newStatus = new Map(prev);
+        unloadedFeeds.forEach(feed => {
           newStatus.set(feed.url, {
             data: null,
             error: null,
             loading: true,
             url: feed.url
           });
-          return newStatus;
         });
-        // 开始加载这个 feed
+        return newStatus;
+      });
+
+      // 开始加载这些 feeds
+      unloadedFeeds.forEach(feed => {
         fetchSingleFeed(feed.url);
-      }
-    });
+      });
+    }
 
     // 清理不再需要的 feed 状态
+    const currentUrls = new Set(settings.feeds.map(feed => feed.url));
     setFeedsStatus(prev => {
       const newStatus = new Map();
-      settings.feeds.forEach(feed => {
-        if (prev.has(feed.url)) {
-          newStatus.set(feed.url, prev.get(feed.url)!);
+      for (const [url, status] of prev.entries()) {
+        if (currentUrls.has(url)) {
+          newStatus.set(url, status);
         }
-      });
+      }
       return newStatus;
     });
   }, [settings.feeds]);
@@ -211,6 +234,13 @@ const RSSFeed = () => {
     return DEFAULT_RSS_FEEDS.find((f: { url: string; name: string }) => f.url === url)?.name;
   };
 
+  // 修改计算动画时长的辅助函数
+  const getAnimationDuration = (itemCount: number) => {
+    // 基础动画时长提高到 600ms，每10条内容增加200ms，最大2000ms
+    const duration = Math.min(600 + Math.floor(itemCount / 10) * 200, 2000);
+    return `${duration}ms`;
+  };
+
   // 修改返回的 JSX，添加初始化检查
   if (!initialized) {
     return <div className="min-h-screen relative">
@@ -229,7 +259,14 @@ const RSSFeed = () => {
         <div className="w-full py-8">
           <div className="max-w-[2000px] mx-auto px-4">
             <div className="w-full max-w-[2000px]">
-              <Settings onSettingsChange={handleSettingsChange} />
+              <div 
+                className="transform transition-all ease-in-out hover:scale-[1.01]"
+                style={{
+                  transitionDuration: '500ms' // 设置按钮使用固定的较长动画时间
+                }}
+              >
+                <Settings onSettingsChange={handleSettingsChange} />
+              </div>
             </div>
             
             <div className="flex gap-6">
@@ -252,10 +289,16 @@ const RSSFeed = () => {
                     return (
                       <div 
                         key={feed.url} 
-                        className="rounded-xl overflow-hidden backdrop-blur-xl bg-white/20 dark:bg-black/20 shadow-lg border border-white/30 dark:border-white/10"
+                        className="rounded-xl overflow-hidden backdrop-blur-xl bg-white/20 dark:bg-black/20 shadow-lg border border-white/30 dark:border-white/10 transition-all ease-in-out hover:shadow-xl"
+                        style={{
+                          transitionDuration: getAnimationDuration(status.data?.items?.length || 0)
+                        }}
                       >
                         <div 
-                          className="p-4 backdrop-blur-sm bg-white/10 dark:bg-black/10 cursor-pointer flex items-center justify-between"
+                          className="p-4 backdrop-blur-sm bg-white/10 dark:bg-black/10 cursor-pointer flex items-center justify-between transition-all ease-in-out hover:bg-white/20 dark:hover:bg-white/15"
+                          style={{
+                            transitionDuration: getAnimationDuration(status.data?.items?.length || 0)
+                          }}
                           onClick={() => toggleFeedCollapse(feed.url)}
                         >
                           <h2 className="text-lg font-bold text-white dark:text-white/90 flex items-center gap-2">
@@ -282,65 +325,87 @@ const RSSFeed = () => {
                             )}
                           </h2>
                           <button 
-                            className="text-white/70 hover:text-white transition-colors"
+                            className="text-white/70 hover:text-white transition-all transform"
+                            style={{
+                              transitionDuration: getAnimationDuration(status.data?.items?.length || 0),
+                              transform: `rotate(${collapsedFeeds[feed.url] ? 0 : 180}deg)`,
+                              transformOrigin: 'center',
+                              transitionTimingFunction: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+                            }}
                             aria-label={collapsedFeeds[feed.url] ? "展开" : "折叠"}
                           >
-                            {collapsedFeeds[feed.url] ? '▼' : '▲'}
+                            ▼
                           </button>
                         </div>
 
-                        {!collapsedFeeds[feed.url] && (
-                          <>
-                            {status.loading && !status.data && (
-                              <div className="p-4 text-white/70">正在加载...</div>
-                            )}
-                            
-                            {status.error && (
-                              <div className="p-4 text-red-200 text-sm bg-red-500/20 rounded">
-                                错误: {status.error}
-                              </div>
-                            )}
+                        <div 
+                          className={`transition-all ease-in-out overflow-hidden`}
+                          style={{
+                            transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+                            transitionDuration: getAnimationDuration(status.data?.items?.length || 0),
+                            maxHeight: collapsedFeeds[feed.url] ? '0' : 
+                              status.data?.items ? `${Math.max((status.data.items.length * 150) + 100, 300)}px` : '200px',
+                            opacity: collapsedFeeds[feed.url] ? '0' : '1',
+                            transform: collapsedFeeds[feed.url] ? 'translateY(-10px)' : 'translateY(0)',
+                            transitionProperty: 'max-height, opacity, transform',
+                            transitionDelay: collapsedFeeds[feed.url] 
+                              ? '0s, 0.1s, 0.2s'  // 折叠时，先改变高度，然后是透明度，最后是位移
+                              : '0s, 0s, 0s',     // 展开时，同时开始所有动画
+                          }}
+                        >
+                          {!collapsedFeeds[feed.url] && (
+                            <>
+                              {status.loading && !status.data && (
+                                <div className="p-4 text-white/70">正在加载...</div>
+                              )}
+                              
+                              {status.error && (
+                                <div className="p-4 text-red-200 text-sm bg-red-500/20 rounded">
+                                  错误: {status.error}
+                                </div>
+                              )}
 
-                            {status.data && (
-                              <div className={`${
-                                selectedItem 
-                                  ? '' 
-                                  : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 p-4'
-                              }`}>
-                                {status.data.items.map((item, itemIndex) => (
-                                  <button 
-                                    key={itemIndex}
-                                    className={`w-full text-left group ${
-                                      selectedItem 
-                                        ? 'px-4 py-2 hover:bg-white/10 dark:hover:bg-white/5' 
-                                        : 'p-4 rounded-lg hover:bg-white/10 dark:hover:bg-white/5'
-                                    } transition-all duration-300 ease-in-out ${
-                                      selectedItem?.item === item ? 'bg-white/20 dark:bg-white/10' : ''
-                                    }`}
-                                    onClick={() => setSelectedItem({ 
-                                      item, 
-                                      feedTitle: status.data?.title || feed.url
-                                    })}
-                                  >
-                                    <h3 className={`font-medium text-white dark:text-white/90 ${
-                                      selectedItem ? 'text-sm line-clamp-2' : 'text-lg mb-2'
-                                    } group-hover:translate-x-1 transition-transform duration-300`}>
-                                      {item.title}
-                                    </h3>
-                                    {!selectedItem && (
-                                      <p className="text-sm text-white/70 dark:text-white/60 mb-2 line-clamp-3">
-                                        {extractTextContent(item.content)}
-                                      </p>
-                                    )}
-                                    <time className="text-xs text-white/50 block">
-                                      {new Date(item.pubDate).toLocaleDateString('zh-CN')}
-                                    </time>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </>
-                        )}
+                              {status.data && (
+                                <div className={`${
+                                  selectedItem 
+                                    ? '' 
+                                    : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 p-4'
+                                }`}>
+                                  {status.data.items.map((item, itemIndex) => (
+                                    <button 
+                                      key={itemIndex}
+                                      className={`w-full text-left group ${
+                                        selectedItem 
+                                          ? 'px-4 py-2 hover:bg-white/10 dark:hover:bg-white/5' 
+                                          : 'p-4 rounded-lg hover:bg-white/10 dark:hover:bg-white/5'
+                                      } transition-all duration-300 ease-in-out ${
+                                        selectedItem?.item === item ? 'bg-white/20 dark:bg-white/10' : ''
+                                      }`}
+                                      onClick={() => setSelectedItem({ 
+                                        item, 
+                                        feedTitle: status.data?.title || feed.url
+                                      })}
+                                    >
+                                      <h3 className={`font-medium text-white dark:text-white/90 ${
+                                        selectedItem ? 'text-sm line-clamp-2' : 'text-lg mb-2'
+                                      } group-hover:translate-x-1 transition-transform duration-300`}>
+                                        {item.title}
+                                      </h3>
+                                      {!selectedItem && (
+                                        <p className="text-sm text-white/70 dark:text-white/60 mb-2 line-clamp-3">
+                                          {extractTextContent(item.content)}
+                                        </p>
+                                      )}
+                                      <time className="text-xs text-white/50 block">
+                                        {new Date(item.pubDate).toLocaleDateString('zh-CN')}
+                                      </time>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
