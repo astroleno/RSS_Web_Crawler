@@ -180,7 +180,7 @@ const Settings = ({ onSettingsChange }: SettingsProps) => {
         } else {
           alert('导入的数据格式不正确');
         }
-      } catch (error) {
+      } catch {
         alert('导入失败：无效的JSON文件');
       }
     };

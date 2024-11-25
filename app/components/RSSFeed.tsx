@@ -12,63 +12,59 @@ const STORAGE_KEYS = {
   COLLAPSED_FEEDS: 'rss_reader_collapsed_feeds'
 } as const;
 
-const RSSFeed = () => {
-  // 从 localStorage 初始化 settings
-  const [settings, setSettings] = useState<{
-    apiKey: string;
-    feeds: { url: string }[];
-    llmConfig: {
-      type: string;
-      model: string;
-      baseUrl: string;
-      systemPrompt?: string;
-    };
-  }>(() => {
-    if (typeof window !== 'undefined') {
-      const savedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      return savedSettings ? JSON.parse(savedSettings) : {
-        apiKey: '',
-        feeds: [],
-        llmConfig: {
-          type: 'openai',
-          model: 'gpt-3.5-turbo',
-          baseUrl: 'https://api.openai.com/v1',
-          systemPrompt: DEFAULT_SYSTEM_PROMPT
-        }
-      };
-    }
-    return {
-      apiKey: '',
-      feeds: [],
-      llmConfig: {
-        type: 'openai',
-        model: 'gpt-3.5-turbo',
-        baseUrl: 'https://api.openai.com/v1',
-        systemPrompt: DEFAULT_SYSTEM_PROMPT
-      }
-    };
-  });
+// 创建默认设置
+const DEFAULT_SETTINGS = {
+  apiKey: '',
+  feeds: [],
+  llmConfig: {
+    type: 'openai',
+    model: 'gpt-3.5-turbo',
+    baseUrl: 'https://api.openai.com/v1',
+    systemPrompt: DEFAULT_SYSTEM_PROMPT
+  }
+};
 
-  const [feedsStatus, setFeedsStatus] = useState<{
+const RSSFeed = () => {
+  // 使用 useState 的延迟初始化功能
+  const [initialized, setInitialized] = useState(false);
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [feedsStatus, setFeedsStatus] = useState<Map<string, {
     data: Feed | null;
     error: string | null;
     loading: boolean;
     url: string;
-  }[]>([]);
-
+  }>>(new Map());
   const [selectedItem, setSelectedItem] = useState<{
     item: FeedItem;
     feedTitle: string;
   } | null>(null);
+  const [collapsedFeeds, setCollapsedFeeds] = useState<{[key: string]: boolean}>({});
 
-  // 从 localStorage 初始化折叠状态
-  const [collapsedFeeds, setCollapsedFeeds] = useState<{[key: string]: boolean}>(() => {
-    if (typeof window !== 'undefined') {
+  // 使用 useEffect 来处理客户端的初始化
+  useEffect(() => {
+    if (!initialized) {
+      // 从 localStorage 加载设置
+      const savedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      if (savedSettings) {
+        setSettings(JSON.parse(savedSettings));
+      } else if (settings.feeds.length === 0) {
+        // 如果没有保存的设置，使用默认的 RSS 源
+        const defaultFeeds = DEFAULT_RSS_FEEDS.map(feed => ({ url: feed.url }));
+        setSettings(prev => ({
+          ...prev,
+          feeds: defaultFeeds
+        }));
+      }
+
+      // 从 localStorage 加载折叠状态
       const savedCollapsed = localStorage.getItem(STORAGE_KEYS.COLLAPSED_FEEDS);
-      return savedCollapsed ? JSON.parse(savedCollapsed) : {};
+      if (savedCollapsed) {
+        setCollapsedFeeds(JSON.parse(savedCollapsed));
+      }
+
+      setInitialized(true);
     }
-    return {};
-  });
+  }, [initialized]);
 
   const extractTextContent = (html: string) => {
     const div = document.createElement('div');
@@ -99,54 +95,79 @@ const RSSFeed = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchFeeds = async () => {
-      try {
-        const response = await fetch('/api/rss', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ feeds: settings.feeds })
-        });
-        const data = await response.json();
-        
-        if (data.error) {
-          throw new Error(data.error);
-        }
+  // 新增单个 feed 的加载函数
+  const fetchSingleFeed = async (feedUrl: string) => {
+    try {
+      const response = await fetch('/api/rss', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ feeds: [{ url: feedUrl }] })
+      });
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
 
-        const orderedFeedsStatus = settings.feeds.map(settingFeed => {
-          const matchingFeed = data.feeds.find((f: Feed) => f.sourceUrl === settingFeed.url);
-          return {
-            data: matchingFeed || null,
-            error: matchingFeed ? null : '该RSS源无法访问或格式不正确',
-            loading: false,
-            url: settingFeed.url
-          };
+      const matchingFeed = data.feeds[0];
+      setFeedsStatus(prev => {
+        const newStatus = new Map(prev);
+        newStatus.set(feedUrl, {
+          data: matchingFeed || null,
+          error: matchingFeed ? null : '该RSS源无法访问或格式不正确',
+          loading: false,
+          url: feedUrl
         });
-
-        setFeedsStatus(orderedFeedsStatus);
-      } catch (err) {
-        console.error('RSS获取失败:', err);
-        setFeedsStatus(settings.feeds.map(feed => ({
+        return newStatus;
+      });
+    } catch (err) {
+      console.error(`RSS获取失败 (${feedUrl}):`, err);
+      setFeedsStatus(prev => {
+        const newStatus = new Map(prev);
+        newStatus.set(feedUrl, {
           data: null,
           loading: false,
-          error: err instanceof Error ? err.message : '取RSS内容失败',
-          url: feed.url
-        })));
-      }
-    };
-
-    if (settings.feeds.length > 0) {
-      setFeedsStatus(settings.feeds.map(feed => ({
-        data: null,
-        error: null,
-        loading: true,
-        url: feed.url
-      })));
-      fetchFeeds();
+          error: err instanceof Error ? err.message : '获取RSS内容失败',
+          url: feedUrl
+        });
+        return newStatus;
+      });
     }
-  }, [settings]);
+  };
+
+  useEffect(() => {
+    // 对每个 feed 设置初始状态并开始加载
+    settings.feeds.forEach(feed => {
+      // 检查是否已经在加载或已加载
+      if (!feedsStatus.has(feed.url)) {
+        setFeedsStatus(prev => {
+          const newStatus = new Map(prev);
+          newStatus.set(feed.url, {
+            data: null,
+            error: null,
+            loading: true,
+            url: feed.url
+          });
+          return newStatus;
+        });
+        // 开始加载这个 feed
+        fetchSingleFeed(feed.url);
+      }
+    });
+
+    // 清理不再需要的 feed 状态
+    setFeedsStatus(prev => {
+      const newStatus = new Map();
+      settings.feeds.forEach(feed => {
+        if (prev.has(feed.url)) {
+          newStatus.set(feed.url, prev.get(feed.url)!);
+        }
+      });
+      return newStatus;
+    });
+  }, [settings.feeds]);
 
   useEffect(() => {
     let scrollTimeout: NodeJS.Timeout;
@@ -190,6 +211,16 @@ const RSSFeed = () => {
     return DEFAULT_RSS_FEEDS.find((f: { url: string; name: string }) => f.url === url)?.name;
   };
 
+  // 修改返回的 JSX，添加初始化检查
+  if (!initialized) {
+    return <div className="min-h-screen relative">
+      <div className="fixed inset-0 bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 animate-gradient-breathe" />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="text-white text-lg">加载中...</div>
+      </div>
+    </div>;
+  }
+
   return (
     <div className="min-h-screen relative">
       <div className="fixed inset-0 bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 animate-gradient-breathe" />
@@ -210,174 +241,180 @@ const RSSFeed = () => {
                 }`}
               >
                 <div className="space-y-4">
-                  {feedsStatus.map((feed) => (
-                    <div 
-                      key={feed.url} 
-                      className="rounded-xl overflow-hidden backdrop-blur-xl bg-white/20 dark:bg-black/20 shadow-lg border border-white/30 dark:border-white/10"
-                    >
+                  {settings.feeds.map((feed) => {
+                    const status = feedsStatus.get(feed.url) || {
+                      data: null,
+                      error: null,
+                      loading: true,
+                      url: feed.url
+                    };
+
+                    return (
                       <div 
-                        className="p-4 backdrop-blur-sm bg-white/10 dark:bg-black/10 cursor-pointer flex items-center justify-between"
-                        onClick={() => toggleFeedCollapse(feed.url)}
+                        key={feed.url} 
+                        className="rounded-xl overflow-hidden backdrop-blur-xl bg-white/20 dark:bg-black/20 shadow-lg border border-white/30 dark:border-white/10"
                       >
-                        <h2 className="text-lg font-bold text-white dark:text-white/90 flex items-center gap-2">
-                          {feed.data ? (
-                            // 已加载完成，显示频道名称
-                            <>
-                              <span>{feed.data.title}</span>
-                              <span className="text-sm font-normal text-white/70">
-                                ({feed.data.items.length})
-                              </span>
-                            </>
-                          ) : (
-                            // 正在加载，显示动画效果
-                            <>
-                              {findFeedName(feed.url) ? (
-                                <span className="animate-float">
-                                  {splitTextToChars(findFeedName(feed.url) || '')}
-                                </span>
-                              ) : (
-                                <span>{feed.url}</span>
-                              )}
-                              <span className="text-sm font-normal text-white/70">
-                                (加载中...)
-                              </span>
-                            </>
-                          )}
-                        </h2>
-                        <button 
-                          className="text-white/70 hover:text-white transition-colors"
-                          aria-label={collapsedFeeds[feed.url] ? "展开" : "折叠"}
-                        >
-                          {collapsedFeeds[feed.url] ? '▼' : '▲'}
-                        </button>
-                      </div>
-
-                      {!collapsedFeeds[feed.url] && (
-                        <>
-                          {feed.loading && !feed.data && (
-                            <div className="p-4 text-white/70">正在加载...</div>
-                          )}
-                          
-                          {feed.error && (
-                            <div className="p-4 text-red-200 text-sm bg-red-500/20 rounded">
-                              错误: {feed.error}
-                            </div>
-                          )}
-
-                          {feed.data && (
-                            <div className={`${
-                              selectedItem 
-                                ? '' 
-                                : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 p-4'
-                            }`}>
-                              {feed.data.items.map((item, itemIndex) => (
-                                <button 
-                                  key={itemIndex}
-                                  className={`w-full text-left group ${
-                                    selectedItem 
-                                      ? 'px-4 py-2 hover:bg-white/10 dark:hover:bg-white/5' 
-                                      : 'p-4 rounded-lg hover:bg-white/10 dark:hover:bg-white/5'
-                                  } transition-all duration-300 ease-in-out ${
-                                    selectedItem?.item === item ? 'bg-white/20 dark:bg-white/10' : ''
-                                  }`}
-                                  onClick={() => setSelectedItem({ 
-                                    item, 
-                                    feedTitle: feed.data?.title || feed.url
-                                  })}
-                                >
-                                  <h3 className={`font-medium text-white dark:text-white/90 ${
-                                    selectedItem ? 'text-sm line-clamp-2' : 'text-lg mb-2'
-                                  } group-hover:translate-x-1 transition-transform duration-300`}>
-                                    {item.title}
-                                  </h3>
-                                  {!selectedItem && (
-                                    <p className="text-sm text-white/70 dark:text-white/60 mb-2 line-clamp-3">
-                                      {extractTextContent(item.content)}
-                                    </p>
-                                  )}
-                                  <time className="text-xs text-white/50 block">
-                                    {new Date(item.pubDate).toLocaleDateString('zh-CN')}
-                                  </time>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div 
-                className={`flex-grow transition-all duration-500 ease-in-out transform ${
-                  selectedItem ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
-                }`}
-                style={{ display: selectedItem ? 'block' : 'none' }}
-              >
-                <div className="sticky top-8 rounded-xl overflow-hidden backdrop-blur-xl bg-white/20 dark:bg-black/20 shadow-lg border border-white/30 dark:border-white/10">
-                  <div className="flex justify-between items-center p-6 backdrop-blur-sm bg-white/10 dark:bg-black/10">
-                    <div className="text-sm text-white">
-                      {selectedItem?.feedTitle}
-                    </div>
-                    <button 
-                      onClick={() => setSelectedItem(null)}
-                      className="text-sm text-white hover:text-white/80 transition-colors duration-300"
-                    >
-                      收起文 ×
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <article 
-                      key={selectedItem?.item.title}
-                      className="p-6 animate-fade-in"
-                    >
-                      <div className="max-w-4xl mx-auto">
-                        <h1 className="text-2xl font-bold mb-4 text-white">
-                          {selectedItem?.item.title}
-                        </h1>
-                        <div className="flex items-center gap-4 mb-8">
-                          <time className="text-sm text-white">
-                            {selectedItem?.item.pubDate && new Date(selectedItem.item.pubDate).toLocaleString('zh-CN')}
-                          </time>
-                          <a 
-                            href={selectedItem?.item.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-white hover:text-white/80 transition-colors duration-300 underline"
-                          >
-                            查看原文
-                          </a>
-                        </div>
-                        
-                        <LLMSummary 
-                          content={selectedItem?.item.content || ''} 
-                          apiKey={settings.apiKey}
-                          llmConfig={settings.llmConfig}
-                        />
-                        
                         <div 
-                          className="prose prose-invert max-w-none mt-8 [&>*]:text-white
-                            prose-headings:text-white 
-                            prose-h1:text-2xl prose-h1:font-bold
-                            prose-h2:text-xl prose-h2:font-semibold
-                            prose-h3:text-lg prose-h3:font-medium
-                            prose-p:text-base
-                            prose-a:text-white prose-a:underline hover:prose-a:text-white/80
-                            prose-strong:text-white prose-strong:font-bold
-                            prose-em:text-white prose-em:italic
-                            prose-code:text-white prose-code:bg-white/10
-                            prose-pre:bg-white/10 prose-pre:text-white
-                            prose-ol:text-white prose-ul:text-white
-                            prose-li:text-white
-                            prose-blockquote:text-white prose-blockquote:border-white/30"
-                          dangerouslySetInnerHTML={{ __html: selectedItem?.item.content || '' }}
-                        />
+                          className="p-4 backdrop-blur-sm bg-white/10 dark:bg-black/10 cursor-pointer flex items-center justify-between"
+                          onClick={() => toggleFeedCollapse(feed.url)}
+                        >
+                          <h2 className="text-lg font-bold text-white dark:text-white/90 flex items-center gap-2">
+                            {status.data ? (
+                              <>
+                                <span>{status.data.title}</span>
+                                <span className="text-sm font-normal text-white/70">
+                                  ({status.data.items.length})
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                {findFeedName(feed.url) ? (
+                                  <span className="animate-float">
+                                    {splitTextToChars(findFeedName(feed.url) || '')}
+                                  </span>
+                                ) : (
+                                  <span>{feed.url}</span>
+                                )}
+                                <span className="text-sm font-normal text-white/70">
+                                  {status.loading ? '(加载中...)' : ''}
+                                </span>
+                              </>
+                            )}
+                          </h2>
+                          <button 
+                            className="text-white/70 hover:text-white transition-colors"
+                            aria-label={collapsedFeeds[feed.url] ? "展开" : "折叠"}
+                          >
+                            {collapsedFeeds[feed.url] ? '▼' : '▲'}
+                          </button>
+                        </div>
+
+                        {!collapsedFeeds[feed.url] && (
+                          <>
+                            {status.loading && !status.data && (
+                              <div className="p-4 text-white/70">正在加载...</div>
+                            )}
+                            
+                            {status.error && (
+                              <div className="p-4 text-red-200 text-sm bg-red-500/20 rounded">
+                                错误: {status.error}
+                              </div>
+                            )}
+
+                            {status.data && (
+                              <div className={`${
+                                selectedItem 
+                                  ? '' 
+                                  : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 p-4'
+                              }`}>
+                                {status.data.items.map((item, itemIndex) => (
+                                  <button 
+                                    key={itemIndex}
+                                    className={`w-full text-left group ${
+                                      selectedItem 
+                                        ? 'px-4 py-2 hover:bg-white/10 dark:hover:bg-white/5' 
+                                        : 'p-4 rounded-lg hover:bg-white/10 dark:hover:bg-white/5'
+                                    } transition-all duration-300 ease-in-out ${
+                                      selectedItem?.item === item ? 'bg-white/20 dark:bg-white/10' : ''
+                                    }`}
+                                    onClick={() => setSelectedItem({ 
+                                      item, 
+                                      feedTitle: status.data?.title || feed.url
+                                    })}
+                                  >
+                                    <h3 className={`font-medium text-white dark:text-white/90 ${
+                                      selectedItem ? 'text-sm line-clamp-2' : 'text-lg mb-2'
+                                    } group-hover:translate-x-1 transition-transform duration-300`}>
+                                      {item.title}
+                                    </h3>
+                                    {!selectedItem && (
+                                      <p className="text-sm text-white/70 dark:text-white/60 mb-2 line-clamp-3">
+                                        {extractTextContent(item.content)}
+                                      </p>
+                                    )}
+                                    <time className="text-xs text-white/50 block">
+                                      {new Date(item.pubDate).toLocaleDateString('zh-CN')}
+                                    </time>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
-                    </article>
-                  </div>
+                    );
+                  })}
                 </div>
               </div>
+
+              {selectedItem && (
+                <div 
+                  className="flex-grow transition-all duration-500 ease-in-out transform translate-x-0 opacity-100"
+                >
+                  <div className="sticky top-8 rounded-xl overflow-hidden backdrop-blur-xl bg-white/20 dark:bg-black/20 shadow-lg border border-white/30 dark:border-white/10">
+                    <div className="flex justify-between items-center p-6 backdrop-blur-sm bg-white/10 dark:bg-black/10">
+                      <div className="text-sm text-white">
+                        {selectedItem?.feedTitle}
+                      </div>
+                      <button 
+                        onClick={() => setSelectedItem(null)}
+                        className="text-sm text-white hover:text-white/80 transition-colors duration-300"
+                      >
+                        收起文 ×
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <article 
+                        key={selectedItem?.item.title}
+                        className="p-6 animate-fade-in"
+                      >
+                        <div className="max-w-4xl mx-auto">
+                          <h1 className="text-2xl font-bold mb-4 text-white">
+                            {selectedItem?.item.title}
+                          </h1>
+                          <div className="flex items-center gap-4 mb-8">
+                            <time className="text-sm text-white">
+                              {selectedItem?.item.pubDate && new Date(selectedItem.item.pubDate).toLocaleString('zh-CN')}
+                            </time>
+                            <a 
+                              href={selectedItem?.item.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-white hover:text-white/80 transition-colors duration-300 underline"
+                            >
+                              查看原文
+                            </a>
+                          </div>
+                          
+                          <LLMSummary 
+                            content={selectedItem?.item.content || ''} 
+                            apiKey={settings.apiKey}
+                            llmConfig={settings.llmConfig}
+                          />
+                          
+                          <div 
+                            className="prose prose-invert max-w-none mt-8 [&>*]:text-white
+                              prose-headings:text-white 
+                              prose-h1:text-2xl prose-h1:font-bold
+                              prose-h2:text-xl prose-h2:font-semibold
+                              prose-h3:text-lg prose-h3:font-medium
+                              prose-p:text-base
+                              prose-a:text-white prose-a:underline hover:prose-a:text-white/80
+                              prose-strong:text-white prose-strong:font-bold
+                              prose-em:text-white prose-em:italic
+                              prose-code:text-white prose-code:bg-white/10
+                              prose-pre:bg-white/10 prose-pre:text-white
+                              prose-ol:text-white prose-ul:text-white
+                              prose-li:text-white
+                              prose-blockquote:text-white prose-blockquote:border-white/30"
+                            dangerouslySetInnerHTML={{ __html: selectedItem?.item.content || '' }}
+                          />
+                        </div>
+                      </article>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
