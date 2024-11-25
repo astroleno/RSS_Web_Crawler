@@ -34,7 +34,7 @@ const RSSFeed = () => {
       type: string;
       model: string;
       baseUrl: string;
-      systemPrompt: string;
+      systemPrompt?: string;
     };
   }>(DEFAULT_SETTINGS);
   const [feedsStatus, setFeedsStatus] = useState<Map<string, {
@@ -105,7 +105,16 @@ const RSSFeed = () => {
   };
 
   // 修改 setSettings 的处理函数
-  const handleSettingsChange = (newSettings: typeof settings) => {
+  const handleSettingsChange = (newSettings: {
+    apiKey: string;
+    feeds: { url: string }[];
+    llmConfig: {
+      type: string;
+      model: string;
+      baseUrl: string;
+      systemPrompt?: string;
+    };
+  }) => {
     setSettings(newSettings);
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
@@ -170,6 +179,15 @@ const RSSFeed = () => {
             url: feed.url
           });
         });
+
+        // 清理不再需要的 feed 状态
+        const currentUrls = new Set(settings.feeds.map(feed => feed.url));
+        for (const [url] of newStatus.entries()) {
+          if (!currentUrls.has(url)) {
+            newStatus.delete(url);
+          }
+        }
+
         return newStatus;
       });
 
@@ -177,20 +195,20 @@ const RSSFeed = () => {
       unloadedFeeds.forEach(feed => {
         fetchSingleFeed(feed.url);
       });
-    }
-
-    // 清理不再需要的 feed 状态
-    const currentUrls = new Set(settings.feeds.map(feed => feed.url));
-    setFeedsStatus(prev => {
-      const newStatus = new Map();
-      for (const [url, status] of prev.entries()) {
-        if (currentUrls.has(url)) {
-          newStatus.set(url, status);
+    } else {
+      // 只在没有未加载的 feeds 时清理不需要的状态
+      setFeedsStatus(prev => {
+        const currentUrls = new Set(settings.feeds.map(feed => feed.url));
+        const newStatus = new Map();
+        for (const [url, status] of prev.entries()) {
+          if (currentUrls.has(url)) {
+            newStatus.set(url, status);
+          }
         }
-      }
-      return newStatus;
-    });
-  }, [settings.feeds]);
+        return newStatus;
+      });
+    }
+  }, [settings.feeds]); // 只依赖 settings.feeds
 
   useEffect(() => {
     let scrollTimeout: NodeJS.Timeout;
