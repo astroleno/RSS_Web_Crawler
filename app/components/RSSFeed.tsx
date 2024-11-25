@@ -6,7 +6,14 @@ import Settings from './Settings';
 import { Feed, FeedItem } from '../types/feed';
 import { DEFAULT_SYSTEM_PROMPT } from '../types/llm';
 
+// 添加常量用于 localStorage keys
+const STORAGE_KEYS = {
+  SETTINGS: 'rss_reader_settings',
+  COLLAPSED_FEEDS: 'rss_reader_collapsed_feeds'
+} as const;
+
 const RSSFeed = () => {
+  // 从 localStorage 初始化 settings
   const [settings, setSettings] = useState<{
     apiKey: string;
     feeds: { url: string }[];
@@ -16,15 +23,30 @@ const RSSFeed = () => {
       baseUrl: string;
       systemPrompt?: string;
     };
-  }>({
-    apiKey: '',
-    feeds: [],
-    llmConfig: {
-      type: 'openai',
-      model: 'gpt-3.5-turbo',
-      baseUrl: 'https://api.openai.com/v1',
-      systemPrompt: DEFAULT_SYSTEM_PROMPT
+  }>(() => {
+    if (typeof window !== 'undefined') {
+      const savedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+      return savedSettings ? JSON.parse(savedSettings) : {
+        apiKey: '',
+        feeds: [],
+        llmConfig: {
+          type: 'openai',
+          model: 'gpt-3.5-turbo',
+          baseUrl: 'https://api.openai.com/v1',
+          systemPrompt: DEFAULT_SYSTEM_PROMPT
+        }
+      };
     }
+    return {
+      apiKey: '',
+      feeds: [],
+      llmConfig: {
+        type: 'openai',
+        model: 'gpt-3.5-turbo',
+        baseUrl: 'https://api.openai.com/v1',
+        systemPrompt: DEFAULT_SYSTEM_PROMPT
+      }
+    };
   });
 
   const [feedsStatus, setFeedsStatus] = useState<{
@@ -39,7 +61,14 @@ const RSSFeed = () => {
     feedTitle: string;
   } | null>(null);
 
-  const [collapsedFeeds, setCollapsedFeeds] = useState<{[key: string]: boolean}>({});
+  // 从 localStorage 初始化折叠状态
+  const [collapsedFeeds, setCollapsedFeeds] = useState<{[key: string]: boolean}>(() => {
+    if (typeof window !== 'undefined') {
+      const savedCollapsed = localStorage.getItem(STORAGE_KEYS.COLLAPSED_FEEDS);
+      return savedCollapsed ? JSON.parse(savedCollapsed) : {};
+    }
+    return {};
+  });
 
   const extractTextContent = (html: string) => {
     const div = document.createElement('div');
@@ -48,11 +77,26 @@ const RSSFeed = () => {
     return text.substring(0, 100) + '...';
   };
 
+  // 修改折叠状态的处理函数
   const toggleFeedCollapse = (url: string) => {
-    setCollapsedFeeds(prev => ({
-      ...prev,
-      [url]: !prev[url]
-    }));
+    setCollapsedFeeds(prev => {
+      const newState = {
+        ...prev,
+        [url]: !prev[url]
+      };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEYS.COLLAPSED_FEEDS, JSON.stringify(newState));
+      }
+      return newState;
+    });
+  };
+
+  // 修改 setSettings 的处理函数
+  const handleSettingsChange = (newSettings: typeof settings) => {
+    setSettings(newSettings);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
+    }
   };
 
   useEffect(() => {
@@ -134,7 +178,7 @@ const RSSFeed = () => {
 
   return (
     <div className="min-h-screen relative">
-      <Settings onSettingsChange={setSettings} />
+      <Settings onSettingsChange={handleSettingsChange} />
       <div className="fixed inset-0 bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 animate-gradient-breathe" />
       <div className="absolute inset-0 scroll-container">
         <div className="w-full px-4 py-8">
@@ -240,7 +284,7 @@ const RSSFeed = () => {
                     onClick={() => setSelectedItem(null)}
                     className="text-sm text-white hover:text-white/80 transition-colors duration-300"
                   >
-                    收起文�� ×
+                    收起文 ×
                   </button>
                 </div>
                 <div className="relative">
